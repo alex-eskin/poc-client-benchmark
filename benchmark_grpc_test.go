@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -150,15 +151,42 @@ func BenchmarkAddGrpcEndpoint(b *testing.B) {
 }
 
 func getCredsWithCert() (error, credentials.TransportCredentials) {
-	certPool := x509.NewCertPool()
-	caCert, err := os.ReadFile("./server.crt") // Replace with your CA cert path
+	// Load client cert and key
+	clientCert, err := tls.LoadX509KeyPair("./client.crt", "./client.key")
 	if err != nil {
-		panic(err)
-	}
-	if ok := certPool.AppendCertsFromPEM(caCert); !ok {
-		panic("failed to append CA cert")
+		return err, nil
 	}
 
-	creds := credentials.NewClientTLSFromCert(certPool, "")
-	return err, creds
+	// Load server cert
+	serverCert, err := os.ReadFile("./server.crt") // or your CA cert
+	if err != nil {
+		return err, nil
+	}
+	certPool := x509.NewCertPool()
+	if ok := certPool.AppendCertsFromPEM(serverCert); !ok {
+		return fmt.Errorf("failed to append CA cert"), nil
+	}
+
+	// Create tls.Config for mTLS
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{clientCert},
+		RootCAs:      certPool,
+		// Optionally, set ServerName if needed
+		// ServerName: "localhost",
+	}
+
+	creds := credentials.NewTLS(tlsConfig)
+	return nil, creds
+
+	//certPool := x509.NewCertPool()
+	//caCert, err := os.ReadFile("./server.crt") // Replace with your CA cert path
+	//if err != nil {
+	//	panic(err)
+	//}
+	//if ok := certPool.AppendCertsFromPEM(caCert); !ok {
+	//	panic("failed to append CA cert")
+	//}
+	//
+	//creds := credentials.NewClientTLSFromCert(certPool, "")
+	//return err, creds
 }
